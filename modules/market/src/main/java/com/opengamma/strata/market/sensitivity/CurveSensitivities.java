@@ -5,7 +5,6 @@
  */
 package com.opengamma.strata.market.sensitivity;
 
-import static com.opengamma.strata.collect.Guavate.toImmutableList;
 import static com.opengamma.strata.collect.Guavate.toImmutableSet;
 import static java.util.stream.Collectors.joining;
 
@@ -84,6 +83,9 @@ public final class CurveSensitivities
 
   /**
    * Returns a builder that can be used to create an instance of {@code CurveSensitivities}.
+   * <p>
+   * The builder takes into account the parameter metadata when creating the sensitivity map.
+   * As such, the parameter metadata added to the builder must not be empty.
    * 
    * @param info  the additional information
    * @return the builder
@@ -143,8 +145,7 @@ public final class CurveSensitivities
    * Combines this set of sensitivities with another set.
    * <p>
    * This returns a new curve sensitivities with a combined map of typed sensitivities.
-   * Any sensitivities of the same type will be combined using
-   * {@link CurrencyParameterSensitivities#combinedWith(CurrencyParameterSensitivities)}.
+   * Any sensitivities of the same type will be combined.
    * 
    * @param other  the other parameter sensitivities
    * @return an instance based on this one, with the other instance added
@@ -152,7 +153,7 @@ public final class CurveSensitivities
   public CurveSensitivities combinedWith(Map<CurveSensitivitiesType, CurrencyParameterSensitivities> other) {
     ImmutableMap<CurveSensitivitiesType, CurrencyParameterSensitivities> combinedSens =
         MapStream.concat(MapStream.of(typedSensitivities), MapStream.of(other))
-            .toMap(CurrencyParameterSensitivities::combinedWith);
+            .toMap(CurrencyParameterSensitivities::combinedWith);  // TODO merge using builder
     return new CurveSensitivities(info, combinedSens);
   }
 
@@ -160,8 +161,7 @@ public final class CurveSensitivities
    * Combines this set of sensitivities with another set.
    * <p>
    * This returns a new curve sensitivities with a combined map of typed sensitivities.
-   * Any sensitivities of the same type will be combined using
-   * {@link CurrencyParameterSensitivities#combinedWith(CurrencyParameterSensitivities)}.
+   * Any sensitivities of the same type will be combined.
    * The identifier and attributes of this instance will take precedence.
    * 
    * @param other  the other parameter sensitivities
@@ -196,35 +196,25 @@ public final class CurveSensitivities
     return new CurveSensitivities(
         info,
         MapStream.of(typedSensitivities)
-            .mapValues(sens -> CurrencyParameterSensitivities.of(
-                sens.getSensitivities().stream()
-                    .map(single -> single.toBuilder()
-                        .marketDataName(nameFn.apply(single.getMarketDataName()))
-                        .build())
-                    .collect(toImmutableList())))
+            .mapValues(sens -> sens.withMarketDataNames(nameFn))
             .toMap());
   }
 
   /**
-   * Checks and adjusts the market data names.
+   * Checks and adjusts the parameter metadata values.
    * <p>
-   * The supplied function is invoked for each market data name in this sensitivities.
-   * A typical use case would be to convert index names to curve names valid for an underlying system.
+   * The supplied function is invoked for each parameter metadata in this sensitivities.
+   * A typical use case would be to convert parameter metadata tenors to be valid for an underlying system.
    * 
-   * @param nameFn  the function for checking and adjusting the name
+   * @param mdFn  the function for checking and adjusting the metadata
    * @return the adjusted sensitivity
    * @throws RuntimeException if the function throws an exception
    */
-  public CurveSensitivities withParameterMetadatas(Function<List<ParameterMetadata>, List<ParameterMetadata>> nameFn) {
+  public CurveSensitivities withParameterMetadatas(Function<List<ParameterMetadata>, List<ParameterMetadata>> mdFn) {
     return new CurveSensitivities(
         info,
         MapStream.of(typedSensitivities)
-            .mapValues(sens -> CurrencyParameterSensitivities.of(
-                sens.getSensitivities().stream()
-                    .map(single -> single.toBuilder()
-                        .parameterMetadata(nameFn.apply(single.getParameterMetadata()))
-                        .build())
-                    .collect(toImmutableList())))
+            .mapValues(sens -> sens.withParameterMetadatas(mdFn))
             .toMap());
   }
 

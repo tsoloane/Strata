@@ -17,6 +17,7 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.function.DoubleUnaryOperator;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import org.joda.beans.Bean;
@@ -65,6 +66,7 @@ import com.opengamma.strata.market.surface.Surface;
  * One way of viewing this class is as a {@code Map} from a specific sensitivity key to
  * {@code DoubleArray} sensitivity values. However, instead of being structured as a {@code Map},
  * the data is structured as a {@code List}, with the key and value in each entry.
+ * As such, the sensitivities are always in a "normalized" form.
  */
 @BeanDefinition(builderScope = "private")
 public final class CurrencyParameterSensitivities
@@ -91,6 +93,18 @@ public final class CurrencyParameterSensitivities
    */
   public static CurrencyParameterSensitivities empty() {
     return EMPTY;
+  }
+
+  /**
+   * Returns a builder that can be used to create an instance of {@code CurrencyParameterSensitivities}.
+   * <p>
+   * The builder takes into account the parameter metadata when creating the sensitivity map.
+   * As such, the parameter metadata added to the builder must not be empty.
+   * 
+   * @return the builder
+   */
+  public static CurrencyParameterSensitivitiesBuilder builder() {
+    return new CurrencyParameterSensitivitiesBuilder();
   }
 
   /**
@@ -193,7 +207,11 @@ public final class CurrencyParameterSensitivities
    * <p>
    * This returns a new sensitivity instance with the specified sensitivity added.
    * This instance is immutable and unaffected by this method.
-   * The result may contain duplicate parameter sensitivities.
+   * <p>
+   * The sensitivities are merged using market data name and currency as a key.
+   * The parameter metadata is not checked, thus the caller must ensure the sensitivities
+   * are compatible with the same metadata and parameter count.
+   * To combine taking the metadata into account, use {@link #toBuilder()}.
    * 
    * @param other  the other parameter sensitivity
    * @return an instance based on this one, with the other instance added
@@ -209,7 +227,11 @@ public final class CurrencyParameterSensitivities
    * <p>
    * This returns a new sensitivity instance with a combined list of parameter sensitivities.
    * This instance is immutable and unaffected by this method.
-   * The result may contain duplicate parameter sensitivities.
+   * <p>
+   * The sensitivities are merged using market data name and currency as a key.
+   * The parameter metadata is not checked, thus the caller must ensure the sensitivities
+   * are compatible with the same metadata and parameter count.
+   * To combine taking the metadata into account, use {@link #toBuilder()}.
    * 
    * @param other  the other parameter sensitivities
    * @return an instance based on this one, with the other instance added
@@ -235,6 +257,47 @@ public final class CurrencyParameterSensitivities
       int insertionPoint = -(index + 1);
       mutable.add(insertionPoint, addition);
     }
+  }
+
+  //-------------------------------------------------------------------------
+  /**
+   * Checks and adjusts the market data names.
+   * <p>
+   * The supplied function is invoked for each market data name in this sensitivities.
+   * A typical use case would be to convert index names to curve names valid for an underlying system.
+   * 
+   * @param nameFn  the function for checking and adjusting the name
+   * @return the adjusted sensitivity
+   * @throws RuntimeException if the function throws an exception
+   */
+  public CurrencyParameterSensitivities withMarketDataNames(Function<MarketDataName<?>, MarketDataName<?>> nameFn) {
+    return CurrencyParameterSensitivities.of(
+        sensitivities.stream()
+            .map(single -> single.toBuilder()
+                .marketDataName(nameFn.apply(single.getMarketDataName()))
+                .build())
+            .collect(toImmutableList()));
+  }
+
+  /**
+   * Checks and adjusts the parameter metadata values.
+   * <p>
+   * The supplied function is invoked for each parameter metadata in this sensitivities.
+   * A typical use case would be to convert parameter metadata tenors to be valid for an underlying system.
+   * 
+   * @param mdFn  the function for checking and adjusting the metadata
+   * @return the adjusted sensitivity
+   * @throws RuntimeException if the function throws an exception
+   */
+  public CurrencyParameterSensitivities withParameterMetadatas(
+          Function<List<ParameterMetadata>, List<ParameterMetadata>> mdFn) {
+
+    return CurrencyParameterSensitivities.of(
+        sensitivities.stream()
+            .map(single -> single.toBuilder()
+                .parameterMetadata(mdFn.apply(single.getParameterMetadata()))
+                .build())
+            .collect(toImmutableList()));
   }
 
   //-------------------------------------------------------------------------
@@ -384,6 +447,20 @@ public final class CurrencyParameterSensitivities
       }
     }
     return true;
+  }
+
+  //-------------------------------------------------------------------------
+  /**
+   * Returns a builder populated with the set of sensitivities from this instance.
+   * <p>
+   * The builder takes into account the parameter metadata when creating the sensitivity map.
+   * As such, the parameter metadata added to the builder must not be empty.
+   * 
+   * @return the builder
+   * @throws IllegalArgumentException if any metadata is empty
+   */
+  public CurrencyParameterSensitivitiesBuilder toBuilder() {
+    return new CurrencyParameterSensitivitiesBuilder(sensitivities);
   }
 
   //------------------------- AUTOGENERATED START -------------------------

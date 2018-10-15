@@ -9,6 +9,7 @@ import static com.opengamma.strata.collect.TestHelper.assertThrowsIllegalArg;
 import static com.opengamma.strata.collect.TestHelper.coverBeanEquals;
 import static com.opengamma.strata.collect.TestHelper.coverImmutableBean;
 import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertThrows;
 
 import java.util.List;
 import java.util.Optional;
@@ -19,6 +20,7 @@ import com.google.common.collect.ImmutableList;
 import com.opengamma.strata.basics.currency.Currency;
 import com.opengamma.strata.basics.currency.FxMatrix;
 import com.opengamma.strata.basics.currency.FxRate;
+import com.opengamma.strata.basics.date.Tenor;
 import com.opengamma.strata.collect.array.DoubleArray;
 import com.opengamma.strata.data.MarketDataName;
 import com.opengamma.strata.market.curve.CurveName;
@@ -48,6 +50,11 @@ public class CurrencyParameterSensitivitiesTest {
   private static final List<ParameterMetadata> METADATA1 = ParameterMetadata.listOfEmpty(4);
   private static final List<ParameterMetadata> METADATA2 = ParameterMetadata.listOfEmpty(5);
   private static final List<ParameterMetadata> METADATA3 = ParameterMetadata.listOfEmpty(4);
+  private static final List<ParameterMetadata> METADATA1B = ImmutableList.of(
+      TenorParameterMetadata.of(Tenor.TENOR_1Y),
+      TenorParameterMetadata.of(Tenor.TENOR_2Y),
+      TenorParameterMetadata.of(Tenor.TENOR_3Y),
+      TenorParameterMetadata.of(Tenor.TENOR_4Y));
 
   private static final CurrencyParameterSensitivity ENTRY_USD =
       CurrencyParameterSensitivity.of(NAME1, METADATA1, USD, VECTOR_USD1);
@@ -114,6 +121,30 @@ public class CurrencyParameterSensitivitiesTest {
     assertEquals(test.getSensitivities(), ImmutableList.of(ENTRY_USD_TOTAL));
   }
 
+  public void test_of_list_normalizeNotPossible() {
+    ImmutableList<CurrencyParameterSensitivity> list = ImmutableList.of(ENTRY_USD, ENTRY_USD_SMALL);
+    assertThrowsIllegalArg(() -> CurrencyParameterSensitivities.of(list));
+  }
+
+  //-------------------------------------------------------------------------
+  public void test_builder() {
+    CurrencyParameterSensitivity entry1 =
+        CurrencyParameterSensitivity.of(NAME1, METADATA1B, USD, VECTOR_USD1);
+    CurrencyParameterSensitivity entry2 =
+        CurrencyParameterSensitivity.of(NAME1, METADATA1B.subList(0, 2), USD, VECTOR_USD1.subArray(0, 2));
+    CurrencyParameterSensitivities test = CurrencyParameterSensitivities.builder()
+        .add(entry1)
+        .add(entry2)
+        .build();
+    assertEquals(test.getSensitivities().size(), 1);
+    assertEquals(test.getSensitivities().get(0).getParameterMetadata(), METADATA1B);
+    assertEquals(test.getSensitivities().get(0).getSensitivity(), DoubleArray.of(200, 400, 300, 123));
+  }
+
+  public void test_builder_emptyMetadata() {
+    assertThrows(IllegalArgumentException.class, () -> CurrencyParameterSensitivities.builder().add(ENTRY_USD));
+  }
+
   //-------------------------------------------------------------------------
   public void test_getSensitivity() {
     CurrencyParameterSensitivities test = CurrencyParameterSensitivities.of(ENTRY_USD);
@@ -159,6 +190,20 @@ public class CurrencyParameterSensitivitiesTest {
   public void test_combinedWith_empty() {
     CurrencyParameterSensitivities test = CurrencyParameterSensitivities.empty().combinedWith(SENSI_1);
     assertEquals(test, SENSI_1);
+  }
+
+  //-------------------------------------------------------------------------
+  public void test_withMarketDataNames() {
+    CurrencyParameterSensitivities test = SENSI_1.withMarketDataNames(name -> NAME2);
+    assertEquals(SENSI_1.getSensitivities().get(0).getMarketDataName(), NAME1);
+    assertEquals(test.getSensitivities().get(0).getMarketDataName(), NAME2);
+  }
+
+  //-------------------------------------------------------------------------
+  public void test_withParameterMetadatas() {
+    CurrencyParameterSensitivities test = SENSI_1.withParameterMetadatas(name -> METADATA1B);
+    assertEquals(SENSI_1.getSensitivities().get(0).getParameterMetadata(), METADATA1);
+    assertEquals(test.getSensitivities().get(0).getParameterMetadata(), METADATA1B);
   }
 
   //-------------------------------------------------------------------------
